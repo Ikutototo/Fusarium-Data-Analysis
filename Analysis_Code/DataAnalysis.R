@@ -207,7 +207,7 @@ summary_stats <- Data |>
         .groups = "drop"
     )
 
-# 正規性検定
+# 正規性検定(P < 0.05 → 正規性がないと判断)
 NormalDistribution <- Data |>
     group_by(Treatments, Spores_Order) |>
     summarise(
@@ -216,6 +216,20 @@ NormalDistribution <- Data |>
         .groups = "drop"
     )
 
+# ヒストグラム
+ggplot(Data, aes(x = FreshWeight)) +
+    geom_histogram(binwidth = 0.5, fill = "lightblue", color = "black") +
+    labs(x = "FreshWeight", y = "Counts") +
+    facet_wrap(~ Treatments + Spores_Order) +
+    theme_minimal()
+
+# Q-Qプロット
+ggplot(Data, aes(sample = FreshWeight)) +
+    stat_qq() +
+    stat_qq_line() +
+    labs(x = "Theoretical Quantiles", y = "Sample Quantiles") +
+    facet_wrap(~ Treatments + Spores_Order) +
+    theme_minimal()
 
 ttest_results <- Data |>
     filter(Treatments != "NC") |>
@@ -235,6 +249,35 @@ ttest_results <- Data |>
     mutate(
         p_value = map_dbl(ttest_result, ~ .x$p.value),
         t_statistic = map_dbl(ttest_result, ~ .x$statistic),
+        significance = case_when(
+            p_value < 0.001 ~ "***",
+            p_value < 0.01 ~ "**",
+            p_value < 0.05 ~ "*",
+            p_value < 0.1 ~ ".",
+            TRUE ~ "ns"
+        ),
+        y_position = FreshWeight_mean + FreshWeight_sd + 1 # 1の値は調整用
+    )
+
+wilcox_results <- Data |>
+    filter(Treatments != "NC") |>
+    group_by(Treatments, TreatsConc, Spores_Order) |>
+    summarise(
+        wilcox_result = list(wilcox.test(
+            FreshWeight,
+            Control_Data$FreshWeight,
+            exact = FALSE,
+        )),
+        FreshWeight_mean = mean(FreshWeight, na.rm = TRUE),
+        FreshWeight_sd = sd(FreshWeight, na.rm = TRUE),
+        FreshWeight_se = sd(FreshWeight, na.rm = TRUE) / sqrt(n()),
+        n = n(),
+        Parameter = n() * 4,
+        .groups = "drop"
+    ) |>
+    mutate(
+        p_value = map_dbl(wilcox_result, ~ .x$p.value),
+        # t_statisticはwilcox.test()には存在しないため、この行は削除または変更
         significance = case_when(
             p_value < 0.001 ~ "***",
             p_value < 0.01 ~ "**",
